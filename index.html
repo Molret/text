@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Quick Editor</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; height: 100vh; display: flex; flex-direction: column;
+    background: #0d0f12; color: #e7e9ee;
+    font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  }
+  header {
+    display: flex; gap: 10px; align-items: center; padding: 12px;
+    border-bottom: 1px solid #252932; background: #12151a;
+  }
+  #filename {
+    min-width: 0; flex: 1; max-width: 420px; padding: 9px 11px;
+    border: 1px solid #303640; border-radius: 8px; outline: none;
+    background: #0d0f12; color: #fff; font: inherit;
+  }
+  #filename:focus { border-color: #6c7cff; }
+  button, .open {
+    border: 1px solid #303640; border-radius: 8px; padding: 9px 13px;
+    background: #1a1e25; color: #fff; cursor: pointer; font: inherit;
+  }
+  button:hover, .open:hover { background: #232833; }
+  #save { background: #f3f4f6; color: #111; border-color: #f3f4f6; }
+  #save:hover { background: #fff; }
+  #fileInput { display: none; }
+  #editor {
+    flex: 1; width: 100%; resize: none; border: 0; outline: 0;
+    padding: 18px 20px; background: #0d0f12; color: #dfe4ec;
+    font: 14px/1.6 "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+    tab-size: 4; white-space: pre;
+  }
+  footer {
+    display: flex; justify-content: space-between; gap: 12px;
+    padding: 7px 12px; border-top: 1px solid #252932;
+    color: #858c99; background: #12151a; font-size: 12px;
+  }
+</style>
+</head>
+<body>
+<header>
+  <input id="filename" spellcheck="false" aria-label="Nombre del archivo">
+  <label class="open" for="fileInput">Abrir archivo</label>
+  <input id="fileInput" type="file">
+  <button id="new">Nuevo</button>
+  <button id="save">Guardar como…</button>
+</header>
+
+<textarea id="editor" spellcheck="false" autofocus placeholder="Escribe o pega aquí tu texto/código…"></textarea>
+
+<footer>
+  <span id="status">Listo</span>
+  <span id="stats">Ln 1, Col 1</span>
+</footer>
+
+<script>
+const editor = document.getElementById('editor');
+const filename = document.getElementById('filename');
+const fileInput = document.getElementById('fileInput');
+const status = document.getElementById('status');
+const stats = document.getElementById('stats');
+
+function safeName(name) {
+  return (name || 'archivo').replace(/[\/\\]/g, '_');
+}
+
+function updateStats() {
+  const before = editor.value.slice(0, editor.selectionStart);
+  const lines = before.split('\n');
+  stats.textContent = `Ln ${lines.length}, Col ${lines.at(-1).length + 1}`;
+}
+editor.addEventListener('keyup', updateStats);
+editor.addEventListener('click', updateStats);
+editor.addEventListener('input', () => { status.textContent = 'Sin guardar'; updateStats(); });
+
+editor.addEventListener('keydown', e => {
+  if (e.key === 'Tab') {
+    e.preventDefault();
+    const start = editor.selectionStart, end = editor.selectionEnd;
+    editor.setRangeText('    ', start, end, 'end');
+    status.textContent = 'Sin guardar';
+  }
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
+    e.preventDefault();
+    saveFile();
+  }
+});
+
+fileInput.addEventListener('change', async () => {
+  const file = fileInput.files[0];
+  if (!file) return;
+  filename.value = file.name;
+  editor.value = await file.text();
+  status.textContent = `Abierto: ${file.name}`;
+  updateStats();
+  fileInput.value = '';
+});
+
+document.getElementById('new').addEventListener('click', () => {
+  if (editor.value && !confirm('¿Vaciar el editor y crear un archivo nuevo?')) return;
+  editor.value = '';
+  filename.value = '';
+  status.textContent = 'Nuevo archivo';
+  updateStats();
+  editor.focus();
+});
+
+async function saveFile() {
+  const name = safeName(filename.value.trim());
+  filename.value = name;
+  const blob = new Blob([editor.value], { type: 'application/octet-stream' });
+
+  if ('showSaveFilePicker' in window) {
+    try {
+      const handle = await window.showSaveFilePicker({ suggestedName: name });
+      const writable = await handle.createWritable();
+      await writable.write(blob);
+      await writable.close();
+      filename.value = handle.name;
+      status.textContent = `Guardado: ${handle.name}`;
+      return;
+    } catch (err) {
+      if (err && err.name === 'AbortError') return;
+    }
+  }
+
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = name;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  status.textContent = `Descargado: ${name}`;
+}
+
+document.getElementById('save').addEventListener('click', saveFile);
+updateStats();
+</script>
+</body>
+</html>
